@@ -1,0 +1,8 @@
+{
+  "name": "Touch Action Scheduler Card",
+  "description": "A Lovelace custom card for touchscreen scheduling and instant control of HA actions.",
+  "content_in_root": false,
+  "filename": "touch-action-scheduler-card.js",
+  "homeassistant": "2024.1.0",
+  "render_readme": false
+}
