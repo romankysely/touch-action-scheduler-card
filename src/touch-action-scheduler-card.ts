@@ -281,10 +281,14 @@ class TouchActionSchedulerCard extends LitElement {
 
 customElements.define('touch-action-scheduler-card', TouchActionSchedulerCard);
 
+const CARD_VERSION = '0.1.1';
+console.info(`%c touch-action-scheduler-card %c v${CARD_VERSION} `, 'background:#607d8b;color:#fff;font-weight:700', 'background:#ffc107;color:#000;font-weight:700');
+
 const _w = window as unknown as Record<string, unknown>;
 _w['customCards'] = _w['customCards'] || [];
 (_w['customCards'] as Array<Record<string, unknown>>).push({
   type: 'touch-action-scheduler-card',
   name: 'Touch Action Scheduler Card',
   description: 'Touchscreen card for scheduling and instant control of HA actions.',
+  version: CARD_VERSION,
 });
