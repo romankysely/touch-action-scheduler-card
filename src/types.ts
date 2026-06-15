@@ -6,7 +6,7 @@ export type InitialValue = 'next_interval';
 
 export interface HassEntity {
   state: string;
-  attributes: Record<string, unknown>;
+  attributes: Record<string, unknown> & { timestamp?: number };
   entity_id: string;
 }
 

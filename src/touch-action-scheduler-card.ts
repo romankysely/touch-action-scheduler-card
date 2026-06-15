@@ -73,8 +73,10 @@ class TouchActionSchedulerCard extends LitElement {
     if (!this.hass || !this._config) return null;
     const entity = this.hass.states[this._config.entity];
     if (!entity) return null;
-    const raw = entity.state;
-    return parseDatetime(raw);
+    // Use Unix timestamp from attributes — timezone-independent, works on any device locale
+    const ts = entity.attributes.timestamp;
+    if (typeof ts === 'number') return new Date(ts * 1000);
+    return parseDatetime(entity.state);
   }
 
   private _getCardState(): CardState {

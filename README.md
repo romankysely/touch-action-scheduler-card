@@ -58,18 +58,18 @@ Designed for use cases like EV charging, water heating, energy accumulation, or 
 type: custom:touch-action-scheduler-card
 name: EV Charging
 icon: mdi:battery-charging
-entity: input_datetime.renault_charging_start_datetime
-status_entity: switch.nabijeni_carport_renault
+entity: input_datetime.my_action_schedule
+status_entity: switch.my_action_switch
 start_action:
   label: Start now
   action: switch.turn_on
   target:
-    entity_id: switch.nabijeni_carport_renault
+    entity_id: switch.my_action_switch
 stop_action:
   label: Stop now
   action: switch.turn_off
   target:
-    entity_id: switch.nabijeni_carport_renault
+    entity_id: switch.my_action_switch
 ```
 
 ---
@@ -78,10 +78,10 @@ stop_action:
 
 ```yaml
 type: custom:touch-action-scheduler-card
-entity: input_datetime.volvo_charging_start_datetime
-name: EV Charging — Volvo
-icon: mdi:battery-charging
-status_entity: switch.nabijeni_volvo
+entity: input_datetime.my_action_schedule
+name: My Action
+icon: mdi:clock-outline
+status_entity: switch.my_action_switch
 
 # Time behavior
 round_to_minutes: 15       # Round initial time to nearest interval (default: 15)
@@ -135,13 +135,13 @@ start_action:
   label: Start now
   action: switch.turn_on
   target:
-    entity_id: switch.nabijeni_volvo
+    entity_id: switch.my_action_switch
 
 stop_action:
   label: Stop now
   action: switch.turn_off
   target:
-    entity_id: switch.nabijeni_volvo
+    entity_id: switch.my_action_switch
 ```
 
 ---

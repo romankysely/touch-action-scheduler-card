@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1] - 2026-06-15
+
+### Fixed
+- **Timezone bug on kiosk devices:** `input_datetime` state was parsed as a local time string without timezone info, causing incorrect initial time on devices with UTC clock (e.g. Chromium kiosk). Now uses `entity.attributes.timestamp` (Unix timestamp) which is always UTC-independent.
+- **Generic entity names in README:** replaced real entity IDs with `input_datetime.my_action_schedule` / `switch.my_action_switch` placeholders.
+
 ## [0.1.0] - 2026-06-14
 
 ### Added
