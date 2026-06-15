@@ -129,8 +129,12 @@ class TouchActionSchedulerCard extends LitElement {
     if (!this.hass || !this._config) return 'inactive';
     const statusEntity = this.hass.states[this._config.status_entity];
     const statusState = statusEntity?.state;
+    const now = new Date();
     const haDatetime = this._getHaDatetime();
-    return computeState(statusState, haDatetime?.toISOString(), new Date());
+    // For state: use localDt when editing, confirmedDt briefly after save, otherwise raw HA value
+    // Never use roundUpToInterval — that would show "scheduled" even when nothing is planned
+    const effectiveDt = this._isDirty ? this._localDt : (this._confirmedDt ?? haDatetime);
+    return computeState(statusState, effectiveDt?.toISOString(), now);
   }
 
   private _shift(deltaMinutes: number): void {
@@ -245,7 +249,6 @@ class TouchActionSchedulerCard extends LitElement {
 
     const cardState = this._getCardState();
     const labels = this._config.labels ?? {};
-    const confirm = this._config.confirm !== false;
     const showMinute = this._config.show_minute_buttons ?? false;
     const isPopup = this._config.interaction_mode === 'popup';
     const stepMinutes = this._config.step_minutes ?? 15;
@@ -253,23 +256,39 @@ class TouchActionSchedulerCard extends LitElement {
     const tz = this._timeZone;
     const interval = this._config.round_to_minutes ?? 15;
     const haDatetime = this._getHaDatetime();
-    // Priority: editing → confirmed (pending HA response) → live HA value → next interval
     const displayDt = this._isDirty
       ? this._localDt
       : this._confirmedDt
         ?? (haDatetime && isFuture(haDatetime, now) ? haDatetime : roundUpToInterval(now, interval, tz));
     const relativeStr = isFuture(displayDt, now) ? formatRelative(displayDt, now) : null;
     const savedStr = haDatetime ? formatDisplay(haDatetime, tz) : '—';
+    const stateClasses = { [`state-${cardState}`]: true };
 
-    const stateClasses = {
-      [`state-${cardState}`]: true,
-    };
+    // Split time and date for separate display
+    const timeParts = new Intl.DateTimeFormat('cs-CZ', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }).format(displayDt);
+    const dateParts = (() => {
+      const nowKey = new Intl.DateTimeFormat('cs-CZ', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+      const dtKey  = new Intl.DateTimeFormat('cs-CZ', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(displayDt);
+      const tmrKey = new Intl.DateTimeFormat('cs-CZ', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(now.getTime() + 86400000));
+      if (dtKey === nowKey) return 'Dnes';
+      if (dtKey === tmrKey) return 'Zítra';
+      return new Intl.DateTimeFormat('cs-CZ', { timeZone: tz, day: 'numeric', month: 'numeric' }).format(displayDt);
+    })();
+
+    const presets = [
+      ...(this._config.tomorrow_preset
+        ? [html`<button class="btn-preset" @click=${this._setTomorrow}>${this._config.tomorrow_preset.label ?? (labels.tomorrow ?? 'Zítra')}</button>`]
+        : []),
+      ...(this._config.quick_times?.map(qt => html`
+        <button class="btn-preset" @click=${() => this._setQuickTime(qt.day, qt.time)}>${qt.label}</button>
+      `) ?? []),
+    ];
 
     return html`
       <ha-card style=${styleMap(this._applyStateColors())}>
         <div class="card-header">
           <div class="card-icon ${classMap(stateClasses)}">
-            <ha-icon icon=${this._config.icon ?? 'mdi:clock-outline'}></ha-icon>
+            <ha-icon icon=${this._config.icon ?? 'mdi:ev-plug-type2'}></ha-icon>
           </div>
           <div class="card-name">${this._config.name ?? 'Plánovač'}</div>
           <span class="state-badge ${classMap(stateClasses)}">
@@ -278,12 +297,14 @@ class TouchActionSchedulerCard extends LitElement {
         </div>
 
         <div class="time-display ${this._isDirty ? 'dirty' : ''}">
-          <div class="time-main">${formatDisplay(displayDt, tz)}</div>
+          <div class="time-label ${this._isDirty ? 'dirty' : ''}">
+            ${this._isDirty ? 'Neuloženo' : 'Začátek nabíjení'}
+          </div>
+          <div class="time-main">${timeParts}</div>
+          <div class="time-date">${dateParts}</div>
           ${relativeStr ? html`<div class="time-relative">${relativeStr}</div>` : nothing}
           ${this._isDirty
-            ? html`<div class="time-pending-label">
-                neuloženo · uloženo: ${savedStr}
-              </div>`
+            ? html`<div class="time-pending-label">uloženo: ${savedStr}</div>`
             : nothing}
         </div>
 
@@ -301,28 +322,16 @@ class TouchActionSchedulerCard extends LitElement {
           </div>
         ` : nothing}
 
-        ${this._config.tomorrow_preset ? html`
-          <div class="btn-grid-wide">
-            <button class="btn-tomorrow" @click=${this._setTomorrow}>
-              ${this._config.tomorrow_preset.label ?? (labels.tomorrow ?? 'Zítra')}
-            </button>
+        ${presets.length > 0 ? html`
+          <div class="${presets.length === 1 ? 'btn-presets-1' : 'btn-presets'}">
+            ${presets}
           </div>
         ` : nothing}
 
-        ${this._config.quick_times?.map(qt => html`
-          <div class="btn-grid-wide">
-            <button class="btn-tomorrow" @click=${() => this._setQuickTime(qt.day, qt.time)}>
-              ${qt.label}
-            </button>
-          </div>
-        `)}
-
         ${this._isDirty ? html`
-          <div class="btn-grid-wide">
-            <button class="btn-confirm" @click=${isPopup ? this._saveAndClose : this._confirm} ?disabled=${this._saving}>
-              ${this._saving ? 'Ukládám…' : (isPopup ? (labels.save_and_close ?? 'Uložit plán a zavřít') : (labels.confirm ?? 'Uložit plán'))}
-            </button>
-          </div>
+          <button class="btn-confirm" @click=${isPopup ? this._saveAndClose : this._confirm} ?disabled=${this._saving}>
+            ${this._saving ? 'Ukládám…' : (isPopup ? (labels.save_and_close ?? 'Uložit plán a zavřít') : (labels.confirm ?? 'Uložit plán'))}
+          </button>
         ` : nothing}
 
         <div class="divider"></div>

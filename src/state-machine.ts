@@ -1,25 +1,24 @@
 import type { CardState } from './types.js';
 
+const ACTIVE_WINDOW_MS = 12 * 60 * 60 * 1000; // 12 hours
+
 export function computeState(
   statusEntityState: string | undefined,
   datetimeValue: string | undefined,
   now: Date,
 ): CardState {
-  if (statusEntityState === 'on') {
-    return 'active';
-  }
+  if (statusEntityState === 'on') return 'active';
 
-  if (datetimeValue && isDatetimeFuture(datetimeValue, now)) {
-    return 'scheduled';
-  }
+  const dt = datetimeValue ? parseDatetime(datetimeValue) : null;
+  if (!dt) return 'inactive';
+
+  if (dt > now) return 'scheduled';
+
+  // Datetime recently elapsed → assume action is running
+  // Far-past date (e.g. 2000-01-01 written by clearSchedule) → inactive
+  if (now.getTime() - dt.getTime() < ACTIVE_WINDOW_MS) return 'active';
 
   return 'inactive';
-}
-
-function isDatetimeFuture(datetimeValue: string, now: Date): boolean {
-  const dt = parseDatetime(datetimeValue);
-  if (!dt) return false;
-  return dt > now;
 }
 
 export function parseDatetime(value: string): Date | null {
