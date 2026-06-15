@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.3] - 2026-06-15
+
+### Fixed
+- **Popup mode — single confirmation:** "Uložit plán" button is now hidden in popup mode (`interaction_mode: popup`). Only "Uložit a zavřít" is shown, eliminating double confirmation.
+- **Auto-save on X close:** Added `ha-dialog` `closed` event listener as additional trigger for `auto_confirm_on_close`. The card walks up the DOM tree to find the parent `ha-dialog` (Browser Mod uses this) and saves automatically when it closes, including via the X button.
+
 ## [0.1.2] - 2026-06-15
 
 ### Fixed

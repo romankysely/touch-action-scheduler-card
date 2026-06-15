@@ -60,12 +60,40 @@ class TouchActionSchedulerCard extends LitElement {
     this._initLocalDt();
     if (this._config?.interaction_mode === 'popup' && this._config.auto_confirm_on_close) {
       window.addEventListener('browser-mod-popup-closed', this._handlePopupClose);
+      // Also catch ha-dialog close (X button) — delayed to let DOM settle
+      setTimeout(() => this._attachDialogListener(), 200);
     }
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     window.removeEventListener('browser-mod-popup-closed', this._handlePopupClose);
+    this._detachDialogListener();
+  }
+
+  private _dialogEl: Element | null = null;
+
+  private _attachDialogListener(): void {
+    // Walk up through shadow roots to find ha-dialog
+    let node: Node | null = this;
+    for (let i = 0; i < 20; i++) {
+      if (!node) break;
+      if ((node as Element).tagName?.toLowerCase() === 'ha-dialog') {
+        this._dialogEl = node as Element;
+        break;
+      }
+      node = (node as ShadowRoot).host ?? (node as Element).parentNode;
+    }
+    // Fallback: find any open ha-dialog in document
+    if (!this._dialogEl) {
+      this._dialogEl = document.querySelector('ha-dialog[open]');
+    }
+    this._dialogEl?.addEventListener('closed', this._handlePopupClose);
+  }
+
+  private _detachDialogListener(): void {
+    this._dialogEl?.removeEventListener('closed', this._handlePopupClose);
+    this._dialogEl = null;
   }
 
   private _handlePopupClose = (): void => {
@@ -254,7 +282,7 @@ class TouchActionSchedulerCard extends LitElement {
           </div>
         `)}
 
-        ${confirm && this._isDirty ? html`
+        ${confirm && this._isDirty && !isPopup ? html`
           <div class="btn-grid-wide">
             <button class="btn-confirm" @click=${this._confirm} ?disabled=${this._saving}>
               ${this._saving ? 'Ukládám…' : (labels.confirm ?? 'Uložit plán')}
@@ -287,7 +315,7 @@ class TouchActionSchedulerCard extends LitElement {
 
 customElements.define('touch-action-scheduler-card', TouchActionSchedulerCard);
 
-const CARD_VERSION = '0.1.2';
+const CARD_VERSION = '0.1.3';
 console.info(`%c touch-action-scheduler-card %c v${CARD_VERSION} `, 'background:#607d8b;color:#fff;font-weight:700', 'background:#ffc107;color:#000;font-weight:700');
 
 const _w = window as unknown as Record<string, unknown>;
