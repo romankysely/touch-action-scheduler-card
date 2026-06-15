@@ -178,9 +178,72 @@ auto_confirm_on_close: true
 close_after_confirm: true
 ```
 
-If automatic save-on-close is not reliable in your setup, the card shows a **Save & close** fallback button.
+In popup mode:
+- The "Uložit plán" button is replaced by **"Uložit plán a zavřít"** — saves and closes in one tap
+- The button appears only after a change is made
+- Closing with the **X button** auto-saves as well (`auto_confirm_on_close: true`)
 
 The card works fully without Browser Mod — popup mode is optional.
+
+### Example: popup triggered by hold on a mushroom card
+
+Useful when you want a compact card (e.g. a SOC slider) that opens the full scheduler on hold:
+
+```yaml
+type: custom:mushroom-number-card
+entity: input_number.my_charging_soc
+name: "Nabít do:"
+display_mode: slider
+layout: horizontal
+fill_container: true
+icon: mdi:battery-charging
+hold_action:
+  action: fire-dom-event
+  browser_mod:
+    service: browser_mod.popup
+    data:
+      title: Plánovač nabíjení
+      content:
+        type: vertical-stack
+        cards:
+          - type: custom:mushroom-number-card
+            entity: input_number.my_charging_soc
+            name: "Nabít do:"
+            display_mode: slider
+            fill_container: true
+          - type: custom:touch-action-scheduler-card
+            name: Nabíjení
+            icon: mdi:battery-charging
+            entity: input_datetime.my_action_schedule
+            status_entity: switch.my_action_switch
+            interaction_mode: popup
+            confirm: true
+            auto_confirm_on_close: true
+            close_after_confirm: true
+            round_to_minutes: 15
+            step_minutes: 15
+            allow_past: false
+            clear_schedule_on_stop: true
+            tomorrow_preset:
+              label: Zítra 14:00
+              time: "14:00"
+            quick_times:
+              - label: Dnes 14:00
+                day: today
+                time: "14:00"
+            start_action:
+              label: Spustit teď
+              action: switch.turn_on
+              target:
+                entity_id: switch.my_action_switch
+            stop_action:
+              label: Ukončit
+              action: switch.turn_off
+              target:
+                entity_id: switch.my_action_switch
+tap_action:
+  action: none
+```
 
 ---
 

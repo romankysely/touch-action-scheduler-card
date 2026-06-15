@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.4] - 2026-06-15
+
+### Fixed
+- **Cross-card synchronization:** When a popup card saves a new time, the dashboard card (and vice versa) now immediately shows the updated value. Root cause: `_confirmedDt` was held until HA matched the saved value exactly — but when a *different* card saved a *different* time, the mismatch meant `_confirmedDt` was never cleared and the card showed a stale value. Fix: clear `_confirmedDt` on any `hass` update, since the only purpose of `_confirmedDt` is to bridge the tiny window between our save call resolving and HA pushing the state change back.
+
 ## [0.1.3] - 2026-06-15
 
 ### Fixed

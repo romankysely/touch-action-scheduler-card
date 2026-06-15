@@ -25,8 +25,28 @@ class TouchActionSchedulerCard extends LitElement {
 
   @state() private _config?: CardConfig;
   @state() private _localDt: Date = new Date();
+  @state() private _confirmedDt?: Date; // holds saved value until HA confirms
   @state() private _isDirty = false;
   @state() private _saving = false;
+
+  @state() private _clearingSchedule = false;
+
+  updated(changedProps: Map<string, unknown>): void {
+    if (!changedProps.has('hass')) return;
+    if (this._confirmedDt) {
+      const haValue = this._getHaDatetime();
+      if (haValue && Math.abs(haValue.getTime() - this._confirmedDt.getTime()) < 60000) {
+        this._confirmedDt = undefined;
+      }
+    }
+    if (this._clearingSchedule) {
+      const haValue = this._getHaDatetime();
+      if (haValue && !isFuture(haValue, new Date())) {
+        this._clearingSchedule = false;
+        this._initLocalDt();
+      }
+    }
+  }
 
   setConfig(config: CardConfig): void {
     if (!config.entity) throw new Error('touch-action-scheduler-card: missing required field "entity"');
@@ -73,21 +93,14 @@ class TouchActionSchedulerCard extends LitElement {
 
   private _dialogEl: Element | null = null;
 
+  private _getBmDialog(): Element | null {
+    return document.querySelector('home-assistant')
+      ?.shadowRoot?.querySelector('browser-mod-popup')
+      ?.shadowRoot?.querySelector('ha-dialog') ?? null;
+  }
+
   private _attachDialogListener(): void {
-    // Walk up through shadow roots to find ha-dialog
-    let node: Node | null = this;
-    for (let i = 0; i < 20; i++) {
-      if (!node) break;
-      if ((node as Element).tagName?.toLowerCase() === 'ha-dialog') {
-        this._dialogEl = node as Element;
-        break;
-      }
-      node = (node as ShadowRoot).host ?? (node as Element).parentNode;
-    }
-    // Fallback: find any open ha-dialog in document
-    if (!this._dialogEl) {
-      this._dialogEl = document.querySelector('ha-dialog[open]');
-    }
+    this._dialogEl = this._getBmDialog();
     this._dialogEl?.addEventListener('closed', this._handlePopupClose);
   }
 
@@ -124,9 +137,14 @@ class TouchActionSchedulerCard extends LitElement {
     const allow_past = this._config?.allow_past ?? false;
     const interval = this._config?.round_to_minutes ?? 15;
     const now = new Date();
-    let next = addMinutes(this._localDt, deltaMinutes);
+    const tz = this._timeZone;
+    // Start from current display value (HA or local)
+    const base = this._isDirty
+      ? this._localDt
+      : (this._getHaDatetime() ?? roundUpToInterval(now, interval, tz));
+    let next = addMinutes(base, deltaMinutes);
     if (!allow_past && !isFuture(next, now)) {
-      next = clampToFuture(next, interval, this._timeZone);
+      next = clampToFuture(next, interval, tz);
     }
     this._localDt = next;
     this._isDirty = true;
@@ -154,8 +172,10 @@ class TouchActionSchedulerCard extends LitElement {
       this._localDt = clampToFuture(this._localDt, this._config.round_to_minutes ?? 15, this._timeZone);
     }
     this._saving = true;
+    const savedDt = this._localDt;
     try {
-      await callInputDatetimeSet(this.hass, this._config.entity, this._localDt);
+      await callInputDatetimeSet(this.hass, this._config.entity, savedDt);
+      this._confirmedDt = savedDt; // show this until HA confirms the new value
       this._isDirty = false;
     } finally {
       this._saving = false;
@@ -172,11 +192,19 @@ class TouchActionSchedulerCard extends LitElement {
   }
 
   private _tryClosePopup(): void {
+    // Browser Mod 2.x: home-assistant → browser-mod-popup → ha-dialog → close button
+    const dialog = this._getBmDialog();
+    if (dialog) {
+      const closeBtn = dialog.shadowRoot?.querySelector<HTMLElement>('ha-icon-button[data-dialog="close"]');
+      if (closeBtn) { closeBtn.click(); return; }
+      // Fallback: dispatch closed event
+      dialog.dispatchEvent(new Event('closed'));
+      return;
+    }
+    // Fallback: Browser Mod 1.x API
     const w = window as unknown as Record<string, unknown>;
     const bm = w['browser_mod'] as { close_popup?: () => void } | undefined;
-    if (bm?.close_popup) {
-      bm.close_popup();
-    }
+    bm?.close_popup?.();
   }
 
   private async _startNow(): Promise<void> {
@@ -188,10 +216,11 @@ class TouchActionSchedulerCard extends LitElement {
     if (!this._config || !this.hass) return;
     await callHaAction(this.hass, this._config.stop_action);
     if (this._config.clear_schedule_on_stop !== false) {
+      this._clearingSchedule = true;
       await clearSchedule(this.hass, this._config.entity);
     }
     this._isDirty = false;
-    this._initLocalDt();
+    this._confirmedDt = undefined;
   }
 
   private _getStateLabel(cardState: CardState): string {
@@ -222,8 +251,14 @@ class TouchActionSchedulerCard extends LitElement {
     const stepMinutes = this._config.step_minutes ?? 15;
     const now = new Date();
     const tz = this._timeZone;
-    const relativeStr = isFuture(this._localDt, now) ? formatRelative(this._localDt, now) : null;
+    const interval = this._config.round_to_minutes ?? 15;
     const haDatetime = this._getHaDatetime();
+    // Priority: editing → confirmed (pending HA response) → live HA value → next interval
+    const displayDt = this._isDirty
+      ? this._localDt
+      : this._confirmedDt
+        ?? (haDatetime && isFuture(haDatetime, now) ? haDatetime : roundUpToInterval(now, interval, tz));
+    const relativeStr = isFuture(displayDt, now) ? formatRelative(displayDt, now) : null;
     const savedStr = haDatetime ? formatDisplay(haDatetime, tz) : '—';
 
     const stateClasses = {
@@ -243,7 +278,7 @@ class TouchActionSchedulerCard extends LitElement {
         </div>
 
         <div class="time-display ${this._isDirty ? 'dirty' : ''}">
-          <div class="time-main">${formatDisplay(this._localDt, tz)}</div>
+          <div class="time-main">${formatDisplay(displayDt, tz)}</div>
           ${relativeStr ? html`<div class="time-relative">${relativeStr}</div>` : nothing}
           ${this._isDirty
             ? html`<div class="time-pending-label">
@@ -282,10 +317,10 @@ class TouchActionSchedulerCard extends LitElement {
           </div>
         `)}
 
-        ${confirm && this._isDirty && !isPopup ? html`
+        ${this._isDirty ? html`
           <div class="btn-grid-wide">
-            <button class="btn-confirm" @click=${this._confirm} ?disabled=${this._saving}>
-              ${this._saving ? 'Ukládám…' : (labels.confirm ?? 'Uložit plán')}
+            <button class="btn-confirm" @click=${isPopup ? this._saveAndClose : this._confirm} ?disabled=${this._saving}>
+              ${this._saving ? 'Ukládám…' : (isPopup ? (labels.save_and_close ?? 'Uložit plán a zavřít') : (labels.confirm ?? 'Uložit plán'))}
             </button>
           </div>
         ` : nothing}
@@ -300,14 +335,6 @@ class TouchActionSchedulerCard extends LitElement {
             ${this._config.stop_action.label ?? (labels.stop_now ?? 'Ukončit teď')}
           </button>
         </div>
-
-        ${isPopup ? html`
-          <div class="btn-grid-wide" style="margin-top: 8px">
-            <button class="btn-save-close" @click=${this._saveAndClose}>
-              ${labels.save_and_close ?? 'Uložit a zavřít'}
-            </button>
-          </div>
-        ` : nothing}
       </ha-card>
     `;
   }
@@ -315,7 +342,7 @@ class TouchActionSchedulerCard extends LitElement {
 
 customElements.define('touch-action-scheduler-card', TouchActionSchedulerCard);
 
-const CARD_VERSION = '0.1.3';
+const CARD_VERSION = '0.1.4';
 console.info(`%c touch-action-scheduler-card %c v${CARD_VERSION} `, 'background:#607d8b;color:#fff;font-weight:700', 'background:#ffc107;color:#000;font-weight:700');
 
 const _w = window as unknown as Record<string, unknown>;
