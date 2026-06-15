@@ -10,8 +10,13 @@ export interface HassEntity {
   entity_id: string;
 }
 
+export interface HassConfig {
+  time_zone: string;
+}
+
 export interface HomeAssistant {
   states: Record<string, HassEntity>;
+  config: HassConfig;
   callService(domain: string, service: string, data?: Record<string, unknown>): Promise<void>;
 }
 

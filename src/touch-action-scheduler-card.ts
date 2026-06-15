@@ -38,14 +38,19 @@ class TouchActionSchedulerCard extends LitElement {
     this._initLocalDt();
   }
 
+  private get _timeZone(): string {
+    return this.hass?.config?.time_zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  }
+
   private _initLocalDt(): void {
     if (!this._config) return;
     const interval = this._config.round_to_minutes ?? 15;
+    const now = new Date();
     const haValue = this._getHaDatetime();
-    if (haValue && isFuture(haValue)) {
+    if (haValue && isFuture(haValue, now)) {
       this._localDt = haValue;
     } else {
-      this._localDt = roundUpToInterval(new Date(), interval);
+      this._localDt = roundUpToInterval(now, interval, this._timeZone);
     }
     this._isDirty = false;
   }
@@ -90,9 +95,10 @@ class TouchActionSchedulerCard extends LitElement {
   private _shift(deltaMinutes: number): void {
     const allow_past = this._config?.allow_past ?? false;
     const interval = this._config?.round_to_minutes ?? 15;
+    const now = new Date();
     let next = addMinutes(this._localDt, deltaMinutes);
-    if (!allow_past && !isFuture(next)) {
-      next = clampToFuture(next, interval);
+    if (!allow_past && !isFuture(next, now)) {
+      next = clampToFuture(next, interval, this._timeZone);
     }
     this._localDt = next;
     this._isDirty = true;
@@ -101,20 +107,23 @@ class TouchActionSchedulerCard extends LitElement {
   private _setTomorrow(): void {
     const preset = this._config?.tomorrow_preset;
     const timeStr = preset?.time ?? '06:00';
-    this._localDt = setTomorrowTime(timeStr);
+    this._localDt = setTomorrowTime(timeStr, this._timeZone);
     this._isDirty = true;
   }
 
   private _setQuickTime(day: 'today' | 'tomorrow', timeStr: string): void {
-    this._localDt = day === 'tomorrow' ? setTomorrowTime(timeStr) : setTodayTime(timeStr);
+    this._localDt = day === 'tomorrow'
+      ? setTomorrowTime(timeStr, this._timeZone)
+      : setTodayTime(timeStr, this._timeZone);
     this._isDirty = true;
   }
 
   private async _confirm(): Promise<void> {
     if (!this._config || !this.hass || this._saving) return;
     const allow_past = this._config.allow_past ?? false;
-    if (!allow_past && !isFuture(this._localDt)) {
-      this._localDt = clampToFuture(this._localDt, this._config.round_to_minutes ?? 15);
+    const now = new Date();
+    if (!allow_past && !isFuture(this._localDt, now)) {
+      this._localDt = clampToFuture(this._localDt, this._config.round_to_minutes ?? 15, this._timeZone);
     }
     this._saving = true;
     try {
@@ -184,9 +193,10 @@ class TouchActionSchedulerCard extends LitElement {
     const isPopup = this._config.interaction_mode === 'popup';
     const stepMinutes = this._config.step_minutes ?? 15;
     const now = new Date();
+    const tz = this._timeZone;
     const relativeStr = isFuture(this._localDt, now) ? formatRelative(this._localDt, now) : null;
     const haDatetime = this._getHaDatetime();
-    const savedStr = haDatetime ? formatDisplay(haDatetime) : '—';
+    const savedStr = haDatetime ? formatDisplay(haDatetime, tz) : '—';
 
     const stateClasses = {
       [`state-${cardState}`]: true,
@@ -205,7 +215,7 @@ class TouchActionSchedulerCard extends LitElement {
         </div>
 
         <div class="time-display ${this._isDirty ? 'dirty' : ''}">
-          <div class="time-main">${formatDisplay(this._localDt)}</div>
+          <div class="time-main">${formatDisplay(this._localDt, tz)}</div>
           ${relativeStr ? html`<div class="time-relative">${relativeStr}</div>` : nothing}
           ${this._isDirty
             ? html`<div class="time-pending-label">
@@ -252,10 +262,6 @@ class TouchActionSchedulerCard extends LitElement {
           </div>
         ` : nothing}
 
-        ${!confirm && this._isDirty ? html`
-          <!-- auto-save mode: potvrdit zároveň s každou změnou -->
-        ` : nothing}
-
         <div class="divider"></div>
 
         <div class="instant-actions">
@@ -281,7 +287,7 @@ class TouchActionSchedulerCard extends LitElement {
 
 customElements.define('touch-action-scheduler-card', TouchActionSchedulerCard);
 
-const CARD_VERSION = '0.1.1';
+const CARD_VERSION = '0.1.2';
 console.info(`%c touch-action-scheduler-card %c v${CARD_VERSION} `, 'background:#607d8b;color:#fff;font-weight:700', 'background:#ffc107;color:#000;font-weight:700');
 
 const _w = window as unknown as Record<string, unknown>;

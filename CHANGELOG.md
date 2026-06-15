@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.2] - 2026-06-15
+
+### Fixed
+- **Timezone — all display and calculation now use HA server timezone** (`hass.config.time_zone`). Previously the card used device local timezone for formatting and date comparisons, causing wrong times on kiosk devices with a different OS timezone than the HA server. All functions (`formatDisplay`, `setTomorrowTime`, `setTodayTime`, `clampToFuture`) now receive the HA timezone explicitly. Fallback is `Intl.DateTimeFormat().resolvedOptions().timeZone`.
+
 ## [0.1.1] - 2026-06-15
 
 ### Fixed
